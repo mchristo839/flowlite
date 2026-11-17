@@ -112,8 +112,10 @@ jobs:
         run: |
           echo "FLOWLITE_BUILD=$(( ($(date +%s) - EPOCH) / 60 ))" >> "$GITHUB_ENV"
           export FLOWLITE_BUILD=$(( ($(date +%s) - EPOCH) / 60 ))
+          VERSION=${GITHUB_REF_NAME#v}
+          case "$GITHUB_REF" in refs/tags/v*) ;; *) VERSION=0.0.0-test ;; esac
           bun install
-          bun run tauri build --bundles deb --config src-tauri/tauri.flowlite.conf.json
+          bun run tauri build --bundles deb --config src-tauri/tauri.flowlite.conf.json --config "{\"version\":\"$VERSION\"}"
 
       - name: Sign and package
         env:
