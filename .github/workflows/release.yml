@@ -227,10 +227,11 @@ jobs:
           path: out/
 
   # Apple Silicon only. Intel Macs need a separately bundled ONNX Runtime (see upstream build.yml).
+  # Built on an Intel runner for the arm64 target: GitHub's arm64 Mac runners are often out of capacity.
   # Not notarised: the app is ad-hoc signed, so macOS asks people to allow it once.
   macos:
     needs: prep
-    runs-on: macos-15
+    runs-on: macos-15-intel
     env:
       FLOWLITE_BUILD: ${{ needs.prep.outputs.build }}
       VERSION: ${{ needs.prep.outputs.version }}
@@ -246,6 +247,8 @@ jobs:
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6  # v2
       - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca  # stable
+        with:
+          targets: aarch64-apple-darwin
       - uses: swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0  # v2
         with:
           workspaces: "./Handy/src-tauri -> target"
@@ -254,12 +257,12 @@ jobs:
         working-directory: Handy
         run: |
           bun install
-          bun run tauri build --bundles dmg --config src-tauri/tauri.flowlite.conf.json --config "{\"version\":\"$VERSION\"}"
+          bun run tauri build --target aarch64-apple-darwin --bundles dmg --config src-tauri/tauri.flowlite.conf.json --config "{\"version\":\"$VERSION\"}"
 
       - name: Sign and package
         env:
           RELEASE_KEY: ${{ secrets.FLOWLITE_RELEASE_KEY }}
-        run: bash .github/sign-desktop.sh macos Handy/src-tauri/target/release/bundle/dmg/FlowLite_*_aarch64.dmg
+        run: bash .github/sign-desktop.sh macos Handy/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/FlowLite_*_aarch64.dmg
 
       - uses: actions/upload-artifact@v4
         with:
