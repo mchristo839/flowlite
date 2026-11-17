@@ -230,7 +230,7 @@ jobs:
   # Not notarised: the app is ad-hoc signed, so macOS asks people to allow it once.
   macos:
     needs: prep
-    runs-on: macos-14
+    runs-on: macos-latest
     env:
       FLOWLITE_BUILD: ${{ needs.prep.outputs.build }}
       VERSION: ${{ needs.prep.outputs.version }}
