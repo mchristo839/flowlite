@@ -20,7 +20,17 @@ Installed apps check this page every few hours and offer new versions. Android i
 
 ## Android
 
-On first launch a setup screen walks through each permission:
+Installing:
+
+1. Open the [latest release](https://github.com/mchristo839/flowlite/releases/latest) on your phone and download the `.apk`.
+2. Open it. Allow "Install unknown apps" for your browser when Android asks.
+3. If Google Play Protect warns about an unknown app, tap **More details, Install anyway**. FlowLite is not on the Play Store, so Play Protect has not scanned it before.
+
+On first launch a setup screen walks through each permission.
+
+**Accessibility greyed out?** Android 13 and newer block it for apps installed from a download. Open Settings, Apps, FlowLite, tap the three-dot menu at the top right and choose **Allow restricted settings**, then turn Accessibility on. If the menu is missing, try turning on FlowLite under Accessibility once, close the "Restricted setting" message, then look again. The setup screen has a button for this.
+
+The permissions:
 
 | Permission | Why |
 |---|---|
@@ -30,7 +40,7 @@ On first launch a setup screen walks through each permission:
 | Battery: Unrestricted | Some phones, Samsung in particular, stop background apps otherwise. |
 | Notifications | The always-on notification that keeps the bubble alive, with a "Paste last" button. |
 
-Then download a speech model: Parakeet (671 MB, best accuracy, 25 European languages) or Whisper base (160 MB). Files are checked against pinned SHA-256 hashes.
+Then download a speech model, ideally on Wi-Fi: Parakeet (671 MB, best accuracy, 25 European languages) or Whisper base (160 MB). Files are checked against pinned SHA-256 hashes.
 
 Using it:
 

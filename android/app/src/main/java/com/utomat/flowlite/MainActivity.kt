@@ -181,7 +181,17 @@ private fun SetupScreen() {
         Step("Display over other apps", "Shows the floating bubble.", overlay) {
             ctx.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${ctx.packageName}")))
         }
-        Step("Accessibility", "Finds the focused text field and inserts the text. Turn on FlowLite under Installed apps.", access) {
+        // Android 13+ greys out Accessibility for apps installed from a downloaded file ("Restricted setting").
+        // There is no API to check this flag, so the step counts as done once Accessibility is on.
+        if (Build.VERSION.SDK_INT >= 33) {
+            Step("Allow restricted settings", "Android blocks Accessibility for apps installed from a download. " +
+                "Tap Open, then the three-dot menu at the top right, then Allow restricted settings. " +
+                "No menu? Go to the next step first and tap FlowLite once, then come back.", access) {
+                ctx.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${ctx.packageName}")))
+            }
+        }
+        Step("Accessibility", "Finds the focused text field and inserts the text. Turn on FlowLite under Installed apps. " +
+            "Greyed out? Do the step above first.", access) {
             ctx.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         }
         Step("Battery: Unrestricted", "Samsung stops background apps. Open Settings > Apps > FlowLite > Battery and pick Unrestricted.", battery) {
