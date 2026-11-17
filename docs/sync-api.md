@@ -31,7 +31,7 @@ Every record has these fields:
 
 ### transcripts
 
-`text`, `raw_text`, `device` (`android` or `linux`), `app_name`, `engine`, `model`, `language`, `duration_ms`, `transcribe_ms`, `created_at` (Unix ms). Id is a random UUID v4.
+`text`, `raw_text`, `device` (`android`, `linux`, `windows` or `macos`), `app_name`, `engine`, `model`, `language`, `duration_ms`, `transcribe_ms`, `created_at` (Unix ms). Id is a random UUID v4.
 
 ### dictionary
 

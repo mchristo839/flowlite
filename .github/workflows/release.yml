@@ -1,4 +1,4 @@
-# Builds FlowLite for Android and Linux.
+# Builds FlowLite for Android, Linux, Windows and Mac (Apple Silicon).
 #
 # Push a tag like v0.2.0 to build both apps and publish them on the Releases page.
 # Installed apps check that page and offer the update.
@@ -30,6 +30,20 @@ env:
   EPOCH: "1767225600"
 
 jobs:
+  # One build number for every desktop app in a release, so each compares against the same manifests.
+  prep:
+    runs-on: ubuntu-24.04
+    outputs:
+      build: ${{ steps.n.outputs.build }}
+      version: ${{ steps.n.outputs.version }}
+    steps:
+      - id: n
+        run: |
+          echo "build=$(( ($(date +%s) - EPOCH) / 60 ))" >> "$GITHUB_OUTPUT"
+          VERSION=${GITHUB_REF_NAME#v}
+          case "$GITHUB_REF" in refs/tags/v*) ;; *) VERSION=0.0.0-test ;; esac
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
   android:
     runs-on: ubuntu-24.04
     steps:
@@ -83,7 +97,11 @@ jobs:
           path: out/
 
   linux:
+    needs: prep
     runs-on: ubuntu-24.04
+    env:
+      FLOWLITE_BUILD: ${{ needs.prep.outputs.build }}
+      VERSION: ${{ needs.prep.outputs.version }}
     steps:
       - uses: actions/checkout@v4
 
@@ -110,46 +128,147 @@ jobs:
       - name: Build .deb
         working-directory: Handy
         run: |
-          echo "FLOWLITE_BUILD=$(( ($(date +%s) - EPOCH) / 60 ))" >> "$GITHUB_ENV"
-          export FLOWLITE_BUILD=$(( ($(date +%s) - EPOCH) / 60 ))
-          VERSION=${GITHUB_REF_NAME#v}
-          case "$GITHUB_REF" in refs/tags/v*) ;; *) VERSION=0.0.0-test ;; esac
           bun install
           bun run tauri build --bundles deb --config src-tauri/tauri.flowlite.conf.json --config "{\"version\":\"$VERSION\"}"
 
       - name: Sign and package
         env:
           RELEASE_KEY: ${{ secrets.FLOWLITE_RELEASE_KEY }}
-        run: |
-          if [ -z "$RELEASE_KEY" ]; then
-            echo "::error::FLOWLITE_RELEASE_KEY secret is missing. The Linux app refuses unsigned releases."
-            exit 1
-          fi
-          DEB_IN=$(ls Handy/src-tauri/target/release/bundle/deb/FlowLite_*_amd64.deb)
-          mkdir -p out
-          DEB=$(basename "$DEB_IN")
-          cp "$DEB_IN" "out/$DEB"
-          SHA=$(sha256sum "out/$DEB" | cut -d' ' -f1)
-          # Sign version and checksum together (update.rs) so an old release cannot be relabelled as new.
-          KEY=$(mktemp); printf '%s' "$RELEASE_KEY" > "$KEY"
-          MANIFEST=$(mktemp); printf 'flowlite-linux:%s:%s' "$FLOWLITE_BUILD" "$SHA" > "$MANIFEST"
-          (cd Handy && bunx tauri signer sign -f "$KEY" -p "" "$MANIFEST" >/dev/null)
-          SIG=$(cat "$MANIFEST.sig"); rm -f "$KEY" "$MANIFEST" "$MANIFEST.sig"
-          python3 - "$FLOWLITE_BUILD" "$SHA" "$SIG" "$GITHUB_REF_NAME" "$DEB" > out/flowlite-linux.json <<'EOF'
-          import json, sys
-          code, sha, sig, tag, deb = sys.argv[1:]
-          print(json.dumps({"version_code": int(code), "sha256": sha, "signature": sig, "tag": tag, "deb": deb}))
-          EOF
-          cat out/flowlite-linux.json
+        run: bash .github/sign-desktop.sh linux Handy/src-tauri/target/release/bundle/deb/FlowLite_*_amd64.deb
 
       - uses: actions/upload-artifact@v4
         with:
           name: linux
           path: out/
 
+  # Windows steps follow upstream Handy's build.yml: baseline ONNX Runtime (runs on older CPUs),
+  # Vulkan SDK and SPIRV headers for GPU Whisper, and the VC++ runtime bundled next to the app.
+  windows:
+    needs: prep
+    runs-on: windows-2022
+    env:
+      FLOWLITE_BUILD: ${{ needs.prep.outputs.build }}
+      VERSION: ${{ needs.prep.outputs.version }}
+    steps:
+      - name: Enable long paths
+        shell: pwsh
+        run: |
+          New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force
+          git config --system core.longpaths true
+
+      - uses: actions/checkout@v4
+
+      - name: Check out the desktop app
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.HANDY_REPO }}
+          ref: ${{ env.HANDY_REF }}
+          path: Handy
+
+      - uses: oven-sh/setup-bun@v2
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./Handy/src-tauri -> target"
+
+      - name: Install Vulkan SDK
+        uses: humbletim/install-vulkan-sdk@v1.2
+        with:
+          version: 1.4.309.0
+          cache: true
+
+      - name: Install ONNX Runtime
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $v = "1.24.2"
+          Invoke-WebRequest -Uri "https://github.com/microsoft/onnxruntime/releases/download/v$v/onnxruntime-win-x64-$v.zip" -OutFile ort.zip
+          Expand-Archive -Path ort.zip -DestinationPath ort-dist -Force
+          $lib = (Resolve-Path "ort-dist/onnxruntime-win-x64-$v/lib").Path
+          Add-Content -Path $env:GITHUB_ENV -Value "ORT_LIB_LOCATION=$lib"
+          Add-Content -Path $env:GITHUB_ENV -Value "ORT_PREFER_DYNAMIC_LINK=1"
+
+      - name: Install SPIRV headers
+        shell: pwsh
+        run: |
+          vcpkg install spirv-headers:x64-windows
+          if ($LASTEXITCODE -ne 0) { throw "vcpkg install spirv-headers failed" }
+          $prefix = "$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows" -replace '\\','/'
+          Add-Content $env:GITHUB_ENV "CMAKE_PREFIX_PATH=$prefix"
+
+      - name: Locate VC++ runtime to bundle
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $vsRoot = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationPath
+          $ver = (Get-Content (Join-Path $vsRoot "VC\Auxiliary\Build\Microsoft.VCRedistVersion.default.txt")).Trim()
+          $arch = Join-Path $vsRoot "VC\Redist\MSVC\$ver\x64"
+          $crt = Get-ChildItem $arch -Directory -Filter "Microsoft.VC*.CRT" | Sort-Object Name | Select-Object -Last 1
+          $omp = Get-ChildItem $arch -Directory -Filter "Microsoft.VC*.OpenMP" | Sort-Object Name | Select-Object -Last 1
+          if (-not $crt -or -not $omp) { throw "VC++ redist not found under $arch" }
+          Add-Content -Path $env:GITHUB_ENV -Value "HANDY_VC_REDIST_DIRS=$($crt.FullName);$($omp.FullName)"
+
+      - name: Build installer
+        working-directory: Handy
+        shell: bash
+        run: |
+          bun install
+          bun run tauri build --bundles nsis --config src-tauri/tauri.flowlite.conf.json --config "{\"version\":\"$VERSION\"}"
+
+      - name: Sign and package
+        shell: bash
+        env:
+          RELEASE_KEY: ${{ secrets.FLOWLITE_RELEASE_KEY }}
+        run: bash .github/sign-desktop.sh windows Handy/src-tauri/target/release/bundle/nsis/FlowLite_*_x64-setup.exe
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: out/
+
+  # Apple Silicon only. Intel Macs need a separately bundled ONNX Runtime (see upstream build.yml).
+  # Not notarised: the app is ad-hoc signed, so macOS asks people to allow it once.
+  macos:
+    needs: prep
+    runs-on: macos-14
+    env:
+      FLOWLITE_BUILD: ${{ needs.prep.outputs.build }}
+      VERSION: ${{ needs.prep.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check out the desktop app
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.HANDY_REPO }}
+          ref: ${{ env.HANDY_REF }}
+          path: Handy
+
+      - uses: oven-sh/setup-bun@v2
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./Handy/src-tauri -> target"
+
+      - name: Build disk image
+        working-directory: Handy
+        run: |
+          bun install
+          bun run tauri build --bundles dmg --config src-tauri/tauri.flowlite.conf.json --config "{\"version\":\"$VERSION\"}"
+
+      - name: Sign and package
+        env:
+          RELEASE_KEY: ${{ secrets.FLOWLITE_RELEASE_KEY }}
+        run: bash .github/sign-desktop.sh macos Handy/src-tauri/target/release/bundle/dmg/FlowLite_*_aarch64.dmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: out/
+
   publish:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [android, linux]
+    needs: [android, linux, windows, macos]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v4
@@ -159,7 +278,7 @@ jobs:
 
       - name: Checksums
         working-directory: out
-        run: sha256sum *.apk *.deb > SHA256SUMS && cat SHA256SUMS
+        run: sha256sum *.apk *.deb *.exe *.dmg > SHA256SUMS && cat SHA256SUMS
 
       - name: Create release
         env:
@@ -169,6 +288,10 @@ jobs:
           **Android:** download the `.apk` below on your phone and open it. Allow "Install unknown apps" for your browser when asked.
 
           **Linux (Debian, Ubuntu, Mint):** download the `.deb`, then run `sudo apt install ./FlowLite_*.deb`
+
+          **Windows 10 and 11:** download the `-setup.exe` and run it. If Windows SmartScreen warns you, click **More info**, then **Run anyway**.
+
+          **Mac (Apple Silicon, M1 or newer):** download the `.dmg`, open it and drag FlowLite to Applications. On first launch macOS blocks it: open System Settings, Privacy & Security, scroll down and click **Open Anyway**.
 
           Installed apps find this release by themselves and offer to update.
           EOF
