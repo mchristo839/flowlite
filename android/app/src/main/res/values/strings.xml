@@ -1,0 +1,3 @@
+<resources>
+    <string name="accessibility_description">FlowLite finds the text field you are typing in and inserts your dictated text at the cursor. It does not read or store anything else.</string>
+</resources>

@@ -1,0 +1,27 @@
+# Secrets
+.env
+*.key
+*.keystore
+*.jks
+keystore.properties
+local.properties
+
+# Server data (user transcripts and accounts)
+server/pb_data/
+server/backups/
+*.db
+*.db-shm
+*.db-wal
+
+# Build outputs (published through GitHub Releases, never committed)
+*.apk
+*.aab
+*.deb
+*.AppImage
+*.dmg
+*.msi
+*.exe
+build/
+target/
+node_modules/
+.gradle/

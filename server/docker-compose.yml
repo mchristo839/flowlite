@@ -1,0 +1,26 @@
+# FlowLite sync server: PocketBase plus Caddy for automatic HTTPS.
+# Set DOMAIN in .env, point that domain's DNS at this machine, then run ./setup.sh
+services:
+  pocketbase:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${FLOWLITE_PORT:-8090}:8090"
+    volumes:
+      - ./pb_data:/pb/pb_data
+
+  caddy:
+    image: caddy:2.8.4-alpine
+    restart: unless-stopped
+    profiles: ["https"]
+    ports:
+      - "80:80"
+      - "443:443"
+    command: caddy reverse-proxy --from ${DOMAIN:-localhost} --to pocketbase:8090
+    volumes:
+      - caddy_data:/data
+    depends_on:
+      - pocketbase
+
+volumes:
+  caddy_data:

@@ -1,0 +1,173 @@
+# Builds FlowLite for Android and Linux.
+#
+# Push a tag like v0.2.0 to build both apps and publish them on the Releases page.
+# Installed apps check that page and offer the update.
+# "Run workflow" by hand builds both apps without publishing, to test a change.
+#
+# Repository secrets (Settings, Secrets and variables, Actions):
+#   ANDROID_KEYSTORE_B64  base64 of the Android signing keystore. Every installed copy carries
+#                         this key, and Android installs an update only when the key matches.
+#   FLOWLITE_RELEASE_KEY  contents of the Linux release key (tauri signer). The Linux app accepts
+#                         only releases signed with it.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      handy_ref:
+        description: "Branch of the Linux app (Handy fork) to build"
+        default: sync
+
+permissions:
+  contents: write
+
+env:
+  HANDY_REPO: mchristo839/Handy
+  HANDY_REF: ${{ inputs.handy_ref || 'sync' }}
+  # Version codes are minutes since 2026-01-01, so every build installs over the previous one.
+  EPOCH: "1767225600"
+
+jobs:
+  android:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Restore signing key
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KEYSTORE" ]; then
+            echo "::error::ANDROID_KEYSTORE_B64 secret is missing. Releases must carry the same key as installed copies."
+            exit 1
+          fi
+          mkdir -p keys
+          echo "$KEYSTORE" | base64 -d > keys/android-debug.keystore
+
+      - name: Build APK
+        working-directory: android
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          case "$GITHUB_REF" in refs/tags/v*) ;; *) VERSION=0.0.0-test ;; esac
+          ./gradlew --no-daemon assembleRelease -PflowliteVersion="$VERSION"
+
+      - name: Package
+        run: |
+          APK_IN=android/app/build/outputs/apk/release/app-release.apk
+          AAPT=$(ls -d "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -1)
+          CODE=$("$AAPT" dump badging "$APK_IN" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p")
+          NAME=$("$AAPT" dump badging "$APK_IN" | sed -n "s/.*versionName='\([^']*\)'.*/\1/p")
+          mkdir -p out
+          APK="flowlite-$NAME.apk"
+          cp "$APK_IN" "out/$APK"
+          SHA=$(sha256sum "out/$APK" | cut -d' ' -f1)
+          python3 - "$CODE" "$NAME" "$SHA" "$GITHUB_REF_NAME" "$APK" > out/flowlite-android.json <<'EOF'
+          import json, sys
+          code, name, sha, tag, apk = sys.argv[1:]
+          print(json.dumps({"version_code": int(code), "version_name": name, "sha256": sha, "tag": tag, "apk": apk}))
+          EOF
+          cat out/flowlite-android.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: out/
+
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check out the Linux app
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.HANDY_REPO }}
+          ref: ${{ env.HANDY_REF }}
+          path: Handy
+
+      - uses: oven-sh/setup-bun@v2
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./Handy/src-tauri -> target"
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang libclang-dev glslc spirv-headers glslang-tools libvulkan-dev \
+            libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf xdotool \
+            libasound2-dev libopenblas-dev libx11-dev libxtst-dev libxrandr-dev libgtk-layer-shell0 libgtk-layer-shell-dev
+
+      - name: Build .deb
+        working-directory: Handy
+        run: |
+          echo "FLOWLITE_BUILD=$(( ($(date +%s) - EPOCH) / 60 ))" >> "$GITHUB_ENV"
+          export FLOWLITE_BUILD=$(( ($(date +%s) - EPOCH) / 60 ))
+          bun install
+          bun run tauri build --bundles deb --config src-tauri/tauri.flowlite.conf.json
+
+      - name: Sign and package
+        env:
+          RELEASE_KEY: ${{ secrets.FLOWLITE_RELEASE_KEY }}
+        run: |
+          if [ -z "$RELEASE_KEY" ]; then
+            echo "::error::FLOWLITE_RELEASE_KEY secret is missing. The Linux app refuses unsigned releases."
+            exit 1
+          fi
+          DEB_IN=$(ls Handy/src-tauri/target/release/bundle/deb/FlowLite_*_amd64.deb)
+          mkdir -p out
+          DEB=$(basename "$DEB_IN")
+          cp "$DEB_IN" "out/$DEB"
+          SHA=$(sha256sum "out/$DEB" | cut -d' ' -f1)
+          # Sign version and checksum together (update.rs) so an old release cannot be relabelled as new.
+          KEY=$(mktemp); printf '%s' "$RELEASE_KEY" > "$KEY"
+          MANIFEST=$(mktemp); printf 'flowlite-linux:%s:%s' "$FLOWLITE_BUILD" "$SHA" > "$MANIFEST"
+          (cd Handy && bunx tauri signer sign -f "$KEY" -p "" "$MANIFEST" >/dev/null)
+          SIG=$(cat "$MANIFEST.sig"); rm -f "$KEY" "$MANIFEST" "$MANIFEST.sig"
+          python3 - "$FLOWLITE_BUILD" "$SHA" "$SIG" "$GITHUB_REF_NAME" "$DEB" > out/flowlite-linux.json <<'EOF'
+          import json, sys
+          code, sha, sig, tag, deb = sys.argv[1:]
+          print(json.dumps({"version_code": int(code), "sha256": sha, "signature": sig, "tag": tag, "deb": deb}))
+          EOF
+          cat out/flowlite-linux.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: out/
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [android, linux]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+
+      - name: Checksums
+        working-directory: out
+        run: sha256sum *.apk *.deb > SHA256SUMS && cat SHA256SUMS
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > notes.md <<'EOF'
+          **Android:** download the `.apk` below on your phone and open it. Allow "Install unknown apps" for your browser when asked.
+
+          **Linux (Debian, Ubuntu, Mint):** download the `.deb`, then run `sudo apt install ./FlowLite_*.deb`
+
+          Installed apps find this release by themselves and offer to update.
+          EOF
+          gh release create "$GITHUB_REF_NAME" out/* --repo "$GITHUB_REPOSITORY" --title "FlowLite $GITHUB_REF_NAME" --notes-file notes.md
