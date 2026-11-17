@@ -230,7 +230,7 @@ jobs:
   # Not notarised: the app is ad-hoc signed, so macOS asks people to allow it once.
   macos:
     needs: prep
-    runs-on: macos-latest
+    runs-on: macos-15
     env:
       FLOWLITE_BUILD: ${{ needs.prep.outputs.build }}
       VERSION: ${{ needs.prep.outputs.version }}
@@ -266,8 +266,10 @@ jobs:
           name: macos
           path: out/
 
+  # Android and Linux must build. Windows and Mac publish when they built, so a GitHub runner
+  # shortage (common for Mac) does not hold up a release. Their apps keep the previous version.
   publish:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: always() && startsWith(github.ref, 'refs/tags/v') && needs.android.result == 'success' && needs.linux.result == 'success'
     needs: [android, linux, windows, macos]
     runs-on: ubuntu-24.04
     steps:
@@ -278,7 +280,7 @@ jobs:
 
       - name: Checksums
         working-directory: out
-        run: sha256sum *.apk *.deb *.exe *.dmg > SHA256SUMS && cat SHA256SUMS
+        run: shopt -s nullglob && sha256sum *.apk *.deb *.exe *.dmg > SHA256SUMS && cat SHA256SUMS
 
       - name: Create release
         env:
