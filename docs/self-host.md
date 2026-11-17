@@ -67,7 +67,7 @@ On each device, enter:
 Where to find it:
 
 - **Android:** open FlowLite, Settings, Sync, then tap **Sign in**.
-- **Linux:** open FlowLite, the **Sync** page in the sidebar, then click **Sign in**.
+- **Linux, Windows and Mac:** open FlowLite, the **Sync** page in the sidebar, then click **Sign in**.
 
 Signing in also tests the connection. If it fails, the message tells you whether the address is wrong, the server is down, or the email or password is wrong. Your history starts syncing straight away.
 
@@ -77,7 +77,7 @@ Signing in also tests the connection. If it fails, the message tells you whether
 - **Reset a password:** run the same command with the existing email.
 - **Back up:** `./backup.sh /path/to/backups` writes a dated copy and keeps the last 7. To run it every night at 3am, add this line with `crontab -e`:
   `0 3 * * * /path/to/flowlite/server/backup.sh /path/to/backups`
-- **Update:** `git pull && ./setup.sh`
+- **Update:** `git pull && ./setup.sh`. Do this before connecting the Windows or Mac app to a server set up before 18 November 2026, so the server accepts their transcripts.
 - **Dashboard:** `https://sync.yourname.com/_/`, sign in with the admin login.
 
 ## Already run a reverse proxy?

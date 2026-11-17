@@ -14,9 +14,11 @@ Get the latest version from the **[Releases page](https://github.com/mchristo839
 |---|---|---|
 | Android 8 or later (64-bit) | `flowlite-X.Y.Z.apk` | Open the link on your phone, download the APK and open it. Allow "Install unknown apps" for your browser when Android asks. |
 | Linux (Debian, Ubuntu, Mint) | `FlowLite_X.Y.Z_amd64.deb` | `sudo apt install ./FlowLite_*_amd64.deb` |
-| Windows, macOS, iPhone | | Planned |
+| Windows 10 and 11 (64-bit) | `FlowLite_X.Y.Z_x64-setup.exe` | Run it. If SmartScreen warns you, click **More info**, then **Run anyway**. |
+| Mac with Apple Silicon (M1 or newer) | `FlowLite_X.Y.Z_aarch64.dmg` | Open it and drag FlowLite to Applications. See [Mac](#mac) for the first launch. |
+| iPhone, Intel Macs | | Planned |
 
-Installed apps check this page every few hours and offer new versions. Android installs an update only when it carries the same signing key as the installed app. Linux installs only releases signed with the FlowLite release key. `SHA256SUMS` on each release lists the file checksums.
+Installed apps check this page every few hours and offer new versions. Android installs an update only when it carries the same signing key as the installed app. Linux, Windows and Mac install only releases signed with the FlowLite release key. `SHA256SUMS` on each release lists the file checksums.
 
 ## Android
 
@@ -52,9 +54,19 @@ Using it:
 - Dictionary: add words FlowLite should spell your way, or replacements such as "my email" for your address.
 - AI rewrite (off by default) sends text to any OpenAI-compatible service you configure with your own API key.
 
-## Linux
+## Linux, Windows and Mac
 
 Push-to-talk desktop dictation, built from a fork of [Handy](https://github.com/cjpais/Handy). The code lives in the [`sync` branch of the fork](https://github.com/mchristo839/Handy/tree/sync). FlowLite's additions are in `src-tauri/src/flowlite_sync/` and `src/components/flowlite/`.
+
+### Windows
+
+FlowLite is not signed with a paid Microsoft certificate, so SmartScreen shows "Windows protected your PC" the first time. Click **More info**, then **Run anyway**.
+
+### Mac
+
+FlowLite is not notarised by Apple, so macOS blocks the first launch. Open FlowLite once, close the warning, then open System Settings, Privacy & Security, scroll down and click **Open Anyway**. macOS then asks for microphone and Accessibility access. Accessibility lets FlowLite type into other apps.
+
+After an update macOS sometimes asks for Accessibility again. If dictation stops typing, open System Settings, Privacy & Security, Accessibility, remove FlowLite with the minus button and add it again.
 
 ## Sync between devices (optional)
 
