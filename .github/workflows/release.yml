@@ -135,10 +135,11 @@ jobs:
           bun install
           bun run tauri build --bundles deb --config src-tauri/tauri.flowlite.conf.json --config "{\"version\":\"$VERSION\"}"
 
-      # Reuses the release build above, so only FlowLite's own code compiles again.
+      # Debug build, as upstream Handy's own test workflow runs it. A release-profile test build
+      # failed to link ONNX Runtime. Mac is the slowest job, so this adds no time to a release.
       - name: Sync and update tests
         working-directory: Handy/src-tauri
-        run: cargo test --release --lib flowlite_sync
+        run: cargo test --lib flowlite_sync
 
       - name: Sign and package
         env:
