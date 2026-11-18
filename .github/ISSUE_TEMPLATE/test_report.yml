@@ -1,0 +1,91 @@
+name: Test report or problem
+description: Tell us how FlowLite worked on your device, good or bad.
+title: "[Test] "
+labels: ["test report"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing FlowLite. A short report helps, even if everything worked.
+        Please don't paste anything private. Transcripts can contain whatever you said.
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Device
+      options:
+        - Windows 11
+        - Windows 10
+        - Mac with Apple Silicon (M1 or newer)
+        - Mac with an Intel processor
+        - Android
+        - Linux
+    validations:
+      required: true
+
+  - type: input
+    id: system
+    attributes:
+      label: System version and model
+      description: For example "macOS 15.2, MacBook Air M2", "Windows 11 24H2, Dell XPS 13" or "Android 14, Pixel 8"
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: FlowLite version
+      description: The version in the file name you downloaded, for example 0.4.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: result
+    attributes:
+      label: How did it go?
+      options:
+        - Everything worked
+        - It worked, with small problems
+        - Dictation didn't type into my app
+        - It installed but wouldn't open or crashed
+        - I couldn't install it
+        - Something else
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: steps
+    attributes:
+      label: What did you get through?
+      options:
+        - label: Installed it (including any security warning)
+        - label: Gave it microphone access
+        - label: Gave it Accessibility or typing access, if asked
+        - label: Downloaded a speech model
+        - label: Dictated text into another app
+        - label: Used it again after restarting the computer or phone
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead. Screenshots help.
+      placeholder: |
+        I held the shortcut and spoke in Notes. The overlay appeared, but no text arrived.
+    validations:
+      required: true
+
+  - type: input
+    id: apps
+    attributes:
+      label: Apps you dictated into
+      description: For example Chrome, Word, Slack, WhatsApp
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log (optional)
+      description: |
+        Windows, Mac and Linux: press Ctrl+Shift+D (Cmd+Shift+D on Mac) in FlowLite to show debug settings, then open the log folder and paste the end of the newest log here.
+        Read it first and remove anything private.
+      render: text

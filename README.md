@@ -19,6 +19,8 @@ Get the latest version from the **[Releases page](https://github.com/mchristo839
 | Mac with an Intel processor | `FlowLite_X.Y.Z_x64.dmg` | As above. To check which Mac you have, open the Apple menu, About This Mac. "Chip: Apple M..." means Apple Silicon. |
 | iPhone | | Planned |
 
+Tried it on your device? **[Send a test report](https://github.com/mchristo839/flowlite/issues/new?template=test_report.yml)**, good or bad. Windows and Mac reports help most right now.
+
 Installed apps check this page every few hours and offer new versions. Android installs an update only when it carries the same signing key as the installed app. Linux, Windows and Mac install only releases signed with the FlowLite release key. `SHA256SUMS` on each release lists the file checksums.
 
 ## Android
