@@ -27,9 +27,12 @@ import java.util.UUID
 object SyncRules {
     private val NAMESPACE_URL: UUID = UUID.fromString("6ba7b811-9dad-11d1-80b4-00c04fd430c8")
 
-    /** Last write wins. A tie keeps the local copy (it is identical or already queued). */
+    /**
+     * Last write wins. On a tie the server's copy wins: the server keeps the first write it got
+     * with that timestamp (pb_hooks/main.pb.js), so every device ends up with the same value.
+     */
     fun remoteWins(localUpdatedAt: Long?, remoteUpdatedAt: Long) =
-        localUpdatedAt == null || remoteUpdatedAt > localUpdatedAt
+        localUpdatedAt == null || remoteUpdatedAt >= localUpdatedAt
 
     fun dictionaryId(word: String) = uuid5("flowlite:dictionary:" + word.trim().lowercase())
     fun settingId(key: String) = uuid5("flowlite:settings:$key")
@@ -70,6 +73,8 @@ class SyncException(val code: Int, msg: String) : IOException(msg)
 
 /** Talks to PocketBase. Uses HttpURLConnection so the app needs no HTTP library. */
 class SyncClient(private val base: String, private val token: String?) {
+    /** Records the server refused (HTTP 400) in this cycle. They stay queued and retry. */
+    var rejected = 0
     fun call(method: String, path: String, body: JSONObject? = null): Pair<Int, JSONObject> {
         val c = URL(base + path).openConnection() as HttpURLConnection
         try {
@@ -97,14 +102,17 @@ class SyncClient(private val base: String, private val token: String?) {
         return r
     }
 
-    /** Returns true when the record is settled on the server (stored, or server has newer). */
+    /**
+     * Returns true when the record is settled on the server (stored, or server has newer).
+     * A refused record (HTTP 400) returns false, so it stays queued and the status says so.
+     */
     fun push(collection: String, id: String, body: JSONObject): Boolean {
-        val (code, r) = call("PATCH", "/api/collections/$collection/records/$id", body)
-        val final = if (code == 404) call("POST", "/api/collections/$collection/records", JSONObject(body.toString()).put("id", id)).first else code
+        val patch = call("PATCH", "/api/collections/$collection/records/$id", body)
+        val (final, r) = if (patch.first == 404) call("POST", "/api/collections/$collection/records", JSONObject(body.toString()).put("id", id)) else patch
         return when {
             final == 200 || final == 409 -> true
             final == 401 || final == 403 -> throw SyncException(final, "Sign in again")
-            final == 400 -> { Log.w("FlowLite", "Server rejected $collection/$id: $r"); true }
+            final == 400 -> { Log.w("FlowLite", "Server rejected $collection/$id: $r"); rejected++; false }
             else -> throw SyncException(final, "Server error $final")
         }
     }
@@ -145,7 +153,10 @@ object SyncManager {
             pullAll(db, client, prefs)
             if (purgeOld(db)) pushAll(db, client, prefs.userId!!) // old rows pulled from other devices
             failures = 0
-            setStatus(prefs, "Synced " + java.text.DateFormat.getTimeInstance().format(java.util.Date()))
+            val time = java.text.DateFormat.getTimeInstance().format(java.util.Date())
+            // An outdated server is the usual cause of refused changes.
+            setStatus(prefs, if (client.rejected == 0) "Synced $time"
+                else "Synced $time, but the server refused ${client.rejected} change(s). Update the server: git pull && ./setup.sh")
             true
         } catch (e: SyncException) {
             if (e.code == 401 || e.code == 403) { prefs.token = null; setStatus(prefs, "Sign in again") }

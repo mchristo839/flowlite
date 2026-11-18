@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Contract test for the FlowLite sync server. Usage: test_contract.py BASE_URL ENV_FILE"""
+"""Contract test for the FlowLite sync server. Usage: test_contract.py BASE_URL ENV_FILE
+Set FLOWLITE_EMAIL2 and FLOWLITE_PASSWORD2 in ENV_FILE to also test two logins on one server."""
 import json, sys, urllib.parse, time, uuid, urllib.request, urllib.error
 
 base, env_file = sys.argv[1].rstrip("/"), sys.argv[2]
@@ -34,6 +35,8 @@ assert call("POST", "/api/collections/transcripts/records", dict(rec, id=str(uui
 
 st, r = call("PATCH", f"/api/collections/transcripts/records/{rid}", {"text": "older", "updated_at": now - 1}, tok)
 assert st == 409, ("stale update must be rejected", st, r)
+st, r = call("PATCH", f"/api/collections/transcripts/records/{rid}", {"text": "same millisecond", "updated_at": now}, tok)
+assert st == 409, ("an equal timestamp must keep the first write", st, r)
 time.sleep(0.01)
 st, r = call("PATCH", f"/api/collections/transcripts/records/{rid}", {"text": "newer", "updated_at": now + 1, "deleted": True}, tok)
 assert st == 200 and r["text"] == "newer" and r["deleted"] is True, (st, r)
@@ -48,4 +51,21 @@ st, r = call("POST", "/api/collections/dictionary/records", {"id": did, "owner":
 assert st == 200, (st, r)
 st, r = call("POST", "/api/collections/settings/records", {"id": str(uuid.uuid4()), "owner": uid, "key": "contract_test", "value_json": "en", "updated_at": now, "deleted": True}, tok)
 assert st == 200, (st, r)
+def owned(owner, local):  # docs/sync-api.md: server id for dictionary and settings
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"flowlite:owned:{owner}:{local}"))
+
+if env.get("FLOWLITE_EMAIL2"):
+    st, auth2 = call("POST", "/api/collections/users/auth-with-password",
+                     {"identity": env["FLOWLITE_EMAIL2"], "password": env["FLOWLITE_PASSWORD2"]})
+    assert st == 200, (st, auth2)
+    tok2, uid2 = auth2["token"], auth2["record"]["id"]
+    key = f"contract_two_users_{rid}"
+    local = str(uuid.uuid5(uuid.NAMESPACE_URL, f"flowlite:settings:{key}"))
+    for t, u in ((tok, uid), (tok2, uid2)):
+        st, r = call("POST", "/api/collections/settings/records",
+                     {"id": owned(u, local), "owner": u, "key": key, "value_json": u, "updated_at": now, "deleted": True}, t)
+        assert st == 200, ("each login stores its own copy of the same setting", st, r)
+    st, r = call("GET", f"/api/collections/settings/records/{owned(uid, local)}", None, tok2)
+    assert st == 404, ("one login must not read another's record", st, r)
+    print("two logins OK")
 print("contract OK")

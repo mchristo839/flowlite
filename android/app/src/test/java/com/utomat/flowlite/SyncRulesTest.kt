@@ -10,7 +10,7 @@ class SyncRulesTest {
         assertTrue("missing locally", SyncRules.remoteWins(null, 5))
         assertTrue("remote newer", SyncRules.remoteWins(4, 5))
         assertFalse("local newer", SyncRules.remoteWins(6, 5))
-        assertFalse("tie keeps local", SyncRules.remoteWins(5, 5))
+        assertTrue("tie takes the server copy", SyncRules.remoteWins(5, 5))
     }
 
     @Test fun deterministicIdsMatchPython() {
