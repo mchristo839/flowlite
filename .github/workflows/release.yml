@@ -177,14 +177,18 @@ jobs:
           version: 1.4.309.0
           cache: true
 
+      # Microsoft's NuGet package of the official build. The GitHub release download that upstream
+      # Handy uses returned 404 on 18 Nov 2026. The checksum pins the exact file.
       - name: Install ONNX Runtime
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           $v = "1.24.2"
-          Invoke-WebRequest -Uri "https://github.com/microsoft/onnxruntime/releases/download/v$v/onnxruntime-win-x64-$v.zip" -OutFile ort.zip
+          Invoke-WebRequest -Uri "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/$v/microsoft.ml.onnxruntime.$v.nupkg" -OutFile ort.zip
+          $sha = (Get-FileHash ort.zip -Algorithm SHA256).Hash.ToLower()
+          if ($sha -ne "782564d3d68e87269ea1812cc94710ad06fe014faf093f01a6f89d0bd58719d3") { throw "ONNX Runtime checksum mismatch: $sha" }
           Expand-Archive -Path ort.zip -DestinationPath ort-dist -Force
-          $lib = (Resolve-Path "ort-dist/onnxruntime-win-x64-$v/lib").Path
+          $lib = (Resolve-Path "ort-dist/runtimes/win-x64/native").Path
           Add-Content -Path $env:GITHUB_ENV -Value "ORT_LIB_LOCATION=$lib"
           Add-Content -Path $env:GITHUB_ENV -Value "ORT_PREFER_DYNAMIC_LINK=1"
 
