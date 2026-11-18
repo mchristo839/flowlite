@@ -74,7 +74,7 @@ Signing in also tests the connection. If it fails, the message tells you whether
 ## Looking after it
 
 - **Add another person:** `./add-user.sh their@email.com their-password`. Each login sees only its own data.
-- **Reset a password:** run the same command with the existing email.
+- **Reset a password:** run the same command with the existing email. This also signs that login out on every device, which is what to do if a phone or laptop is lost. Logins otherwise last 30 days and renew themselves while the app syncs.
 - **Back up:** `./backup.sh /path/to/backups` writes a dated copy and keeps the last 7. To run it every night at 3am, add this line with `crontab -e`:
   `0 3 * * * /path/to/flowlite/server/backup.sh /path/to/backups`
 - **Update:** `git pull && ./setup.sh`. Do this before connecting the Windows or Mac app to a server set up before 18 November 2026, so the server accepts their transcripts.

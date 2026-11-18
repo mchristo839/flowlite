@@ -13,7 +13,7 @@ POST /api/collections/users/auth-with-password
 ```
 
 - Send the token as `Authorization: <token>` (no `Bearer` prefix needed, PocketBase accepts both).
-- Tokens last 365 days. Call `POST /api/collections/users/auth-refresh` with the token once per day to extend it.
+- Tokens last 30 days. Call `POST /api/collections/users/auth-refresh` with the token once per day to extend it. Resetting the password ends every token at once.
 - Store the token and the user id securely (Android: EncryptedSharedPreferences, Linux: the app settings file with 0600 permissions). Do not store the password.
 - On `401`, stop syncing and show "Sign in again" in Settings. Dictation keeps working.
 
@@ -54,6 +54,14 @@ id = uuid5(NAMESPACE_URL, "flowlite:dictionary:" + lowercase(trim(word)))
 Device settings such as hotkeys, bubble position and engine choice stay local. Id is `uuid5(NAMESPACE_URL, "flowlite:settings:" + key)`.
 
 `NAMESPACE_URL` is the RFC 4122 namespace `6ba7b811-9dad-11d1-80b4-00c04fd430c8`.
+
+These dictionary and settings ids are the local ids. On the server each record also carries the owner, so two logins on one server never share or block an id:
+
+```
+server id = uuid5(NAMESPACE_URL, "flowlite:owned:" + owner + ":" + local id)
+```
+
+When pulling, clients find the local row from the record's `word` or `key`, not from its server id. Apps before 0.4.0 used the local id on the server too, and those records still pull into the right row.
 
 ## Sync rules
 

@@ -278,16 +278,17 @@ class DictationService : Service() {
         state.value = State.PROCESSING
         val pkg = FocusService.focusedPackage
         val selection = FocusService.instance?.selectedText()
+        val private = FocusService.instance?.focusedIsPrivate() ?: false
         scope.launch {
             try {
                 val result = withContext(Dispatchers.Default) {
-                    Dictation.transcribe(this@DictationService, audio, durationMs, pkg, selection)
+                    Dictation.transcribe(this@DictationService, audio, durationMs, pkg, selection, private)
                 }
                 if (result == null) toast("No speech detected")
                 else {
                     val inserted = insertOrCopy(result.text)
                     toast(if (inserted) "%.1f s".format(result.transcribeMs / 1000.0) else "Copied to clipboard")
-                    SyncManager.request(this@DictationService)
+                    if (!private) SyncManager.request(this@DictationService)
                 }
             } catch (e: Exception) {
                 Log.e("FlowLite", "Transcription failed", e)

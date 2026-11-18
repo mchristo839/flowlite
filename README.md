@@ -16,7 +16,8 @@ Get the latest version from the **[Releases page](https://github.com/mchristo839
 | Linux (Debian, Ubuntu, Mint) | `FlowLite_X.Y.Z_amd64.deb` | `sudo apt install ./FlowLite_*_amd64.deb` |
 | Windows 10 and 11 (64-bit) | `FlowLite_X.Y.Z_x64-setup.exe` | Run it. If SmartScreen warns you, click **More info**, then **Run anyway**. |
 | Mac with Apple Silicon (M1 or newer) | `FlowLite_X.Y.Z_aarch64.dmg` | Open it and drag FlowLite to Applications. See [Mac](#mac) for the first launch. |
-| iPhone, Intel Macs | | Planned |
+| Mac with an Intel processor | `FlowLite_X.Y.Z_x64.dmg` | As above. To check which Mac you have, open the Apple menu, About This Mac. "Chip: Apple M..." means Apple Silicon. |
+| iPhone | | Planned |
 
 Installed apps check this page every few hours and offer new versions. Android installs an update only when it carries the same signing key as the installed app. Linux, Windows and Mac install only releases signed with the FlowLite release key. `SHA256SUMS` on each release lists the file checksums.
 
@@ -50,6 +51,7 @@ Using it:
 - Drag the bubble anywhere. Drag it to the bottom centre to hide it for 10 minutes. It never shows in password fields.
 - If an app refuses the text, it goes to the clipboard. "Paste last" in the notification tries again.
 - Voice keyboard: Settings, "Turn on the FlowLite voice keyboard", for apps where the bubble cannot insert text.
+- Private fields: dictation into a password field is never saved to history, synced or sent for AI rewrite. The voice keyboard also treats private browser tabs this way. The bubble cannot tell a private tab apart, so use the voice keyboard there.
 - Say "scratch that" to drop the last sentence. Say "comma", "period", "new line" or "new paragraph" for punctuation.
 - Dictionary: add words FlowLite should spell your way, or replacements such as "my email" for your address.
 - AI rewrite (off by default) sends text to any OpenAI-compatible service you configure with your own API key.

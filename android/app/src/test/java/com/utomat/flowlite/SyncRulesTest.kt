@@ -18,6 +18,12 @@ class SyncRulesTest {
         assertEquals("55ac65ef-9da4-55c6-a4ce-1df859da6111", SyncRules.dictionaryId("  Kubernetes "))
     }
 
+    @Test fun ownedIdsDifferPerAccountAndMatchDesktop() {
+        val local = SyncRules.dictionaryId("kubernetes")
+        assertEquals("2ac742dc-3a0c-5191-9fc5-da94b491e9f4", SyncRules.ownedId(local, "abc123"))
+        assertFalse(SyncRules.ownedId(local, "abc123") == SyncRules.ownedId(local, "xyz789"))
+    }
+
     @Test fun pullCursorOverlapsTwoSeconds() {
         assertEquals("", SyncRules.pullFrom(""))
         assertEquals("2026-10-12 10:33:09.123Z", SyncRules.pullFrom("2026-10-12 10:33:11.123Z"))

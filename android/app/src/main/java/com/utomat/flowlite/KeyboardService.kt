@@ -119,13 +119,8 @@ class KeyboardService : InputMethodService() {
     /** Password fields and apps asking for no learning (incognito tabs): no history, no sync, no AI rewrite. */
     private fun isPrivate(info: EditorInfo?): Boolean {
         if (info == null) return false
-        val variation = info.inputType and (EditorInfo.TYPE_MASK_CLASS or EditorInfo.TYPE_MASK_VARIATION)
-        return variation in setOf(
-            EditorInfo.TYPE_CLASS_TEXT or EditorInfo.TYPE_TEXT_VARIATION_PASSWORD,
-            EditorInfo.TYPE_CLASS_TEXT or EditorInfo.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD,
-            EditorInfo.TYPE_CLASS_TEXT or EditorInfo.TYPE_TEXT_VARIATION_WEB_PASSWORD,
-            EditorInfo.TYPE_CLASS_NUMBER or EditorInfo.TYPE_NUMBER_VARIATION_PASSWORD,
-        ) || info.imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING != 0
+        return PrivateFields.isPasswordType(info.inputType) ||
+            info.imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING != 0
     }
 
     private fun switchKeyboard() {

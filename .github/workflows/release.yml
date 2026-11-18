@@ -1,4 +1,4 @@
-# Builds FlowLite for Android, Linux, Windows and Mac (Apple Silicon).
+# Builds FlowLite for Android, Linux, Windows and Mac (Apple Silicon and Intel).
 #
 # Push a tag like v0.2.0 to build both apps and publish them on the Releases page.
 # Installed apps check that page and offer the update.
@@ -67,6 +67,10 @@ jobs:
           mkdir -p keys
           echo "$KEYSTORE" | base64 -d > keys/android-debug.keystore
 
+      - name: Unit tests
+        working-directory: android
+        run: ./gradlew --no-daemon testReleaseUnitTest
+
       - name: Build APK
         working-directory: android
         run: |
@@ -130,6 +134,11 @@ jobs:
         run: |
           bun install
           bun run tauri build --bundles deb --config src-tauri/tauri.flowlite.conf.json --config "{\"version\":\"$VERSION\"}"
+
+      # Reuses the release build above, so only FlowLite's own code compiles again.
+      - name: Sync and update tests
+        working-directory: Handy/src-tauri
+        run: cargo test --release --lib flowlite_sync
 
       - name: Sign and package
         env:
@@ -230,7 +239,7 @@ jobs:
           name: windows
           path: out/
 
-  # Apple Silicon only. Intel Macs need a separately bundled ONNX Runtime (see upstream build.yml).
+  # Apple Silicon Macs. The Intel build is the macos-intel job below.
   # Built on an Intel runner for the arm64 target: GitHub's arm64 Mac runners are often out of capacity.
   # Not notarised: the app is ad-hoc signed, so macOS asks people to allow it once.
   macos:
@@ -273,11 +282,64 @@ jobs:
           name: macos
           path: out/
 
+  # Intel Macs, built natively.
+  macos-intel:
+    needs: prep
+    runs-on: macos-15-intel
+    env:
+      FLOWLITE_BUILD: ${{ needs.prep.outputs.build }}
+      VERSION: ${{ needs.prep.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check out the desktop app
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.HANDY_REPO }}
+          ref: ${{ env.HANDY_REF }}
+          path: Handy
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6  # v2
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca  # stable
+      - uses: swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0  # v2
+        with:
+          workspaces: "./Handy/src-tauri -> target"
+
+      # Microsoft no longer publishes an Intel Mac build of ONNX Runtime. This is upstream Handy's
+      # own build, the one its Intel Mac release uses. The checksum pins the exact file.
+      - name: Install ONNX Runtime
+        run: |
+          V=1.24.2
+          curl -fsSL -o ort.tgz "https://blob.handy.computer/onnxruntime-osx-x86_64-$V.tgz"
+          echo "590cee05699047b85e4a8115b4cec792073c2972ce78de383356a552a296a9c4  ort.tgz" | shasum -a 256 -c -
+          tar xzf ort.tgz
+          DIR="$PWD/onnxruntime-osx-x86_64-$V"
+          echo "ORT_LIB_LOCATION=$DIR/lib" >> "$GITHUB_ENV"
+          echo "ORT_PREFER_DYNAMIC_LINK=1" >> "$GITHUB_ENV"
+          jq --arg lib "$DIR/lib/libonnxruntime.$V.dylib" '.bundle.macOS.frameworks = [$lib]' \
+            Handy/src-tauri/tauri.conf.json > tmp.json && mv tmp.json Handy/src-tauri/tauri.conf.json
+
+      - name: Build disk image
+        working-directory: Handy
+        run: |
+          bun install
+          bun run tauri build --bundles dmg --config src-tauri/tauri.flowlite.conf.json --config "{\"version\":\"$VERSION\"}"
+
+      - name: Sign and package
+        env:
+          RELEASE_KEY: ${{ secrets.FLOWLITE_RELEASE_KEY }}
+        run: bash .github/sign-desktop.sh macos-x64 Handy/src-tauri/target/release/bundle/dmg/FlowLite_*_x64.dmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-x64
+          path: out/
+
   # Android and Linux must build. Windows and Mac publish when they built, so a GitHub runner
   # shortage (common for Mac) does not hold up a release. Their apps keep the previous version.
   publish:
     if: always() && startsWith(github.ref, 'refs/tags/v') && needs.android.result == 'success' && needs.linux.result == 'success'
-    needs: [android, linux, windows, macos]
+    needs: [android, linux, windows, macos, macos-intel]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v4
@@ -300,7 +362,7 @@ jobs:
 
           **Windows 10 and 11:** download the `-setup.exe` and run it. If Windows SmartScreen warns you, click **More info**, then **Run anyway**.
 
-          **Mac (Apple Silicon, M1 or newer):** download the `.dmg`, open it and drag FlowLite to Applications. On first launch macOS blocks it: open System Settings, Privacy & Security, scroll down and click **Open Anyway**.
+          **Mac:** download `FlowLite_*_aarch64.dmg` for Apple Silicon (M1 or newer) or `FlowLite_*_x64.dmg` for Intel Macs, open it and drag FlowLite to Applications. On first launch macOS blocks it: open System Settings, Privacy & Security, scroll down and click **Open Anyway**.
 
           Installed apps find this release by themselves and offer to update.
           EOF

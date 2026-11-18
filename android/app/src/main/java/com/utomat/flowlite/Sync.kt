@@ -34,6 +34,13 @@ object SyncRules {
     fun dictionaryId(word: String) = uuid5("flowlite:dictionary:" + word.trim().lowercase())
     fun settingId(key: String) = uuid5("flowlite:settings:$key")
 
+    /**
+     * Server record id for a dictionary word or setting. Local ids are the same on every account,
+     * so the server copy also carries the owner. Without it one account on a shared server could
+     * create another account's record first, blocking that sync and revealing which words exist.
+     */
+    fun ownedId(localId: String, owner: String) = uuid5("flowlite:owned:$owner:$localId")
+
     fun uuid5(name: String): String {
         val ns = ByteBuffer.allocate(16).putLong(NAMESPACE_URL.mostSignificantBits)
             .putLong(NAMESPACE_URL.leastSignificantBits).array()
@@ -183,12 +190,12 @@ object SyncManager {
         for (w in db.dictionary().dirty()) {
             val body = JSONObject().put("owner", owner).put("word", w.word).put("replacement", w.replacement ?: "")
                 .put("updated_at", w.updatedAt).put("deleted", w.deleted)
-            if (c.push("dictionary", w.id, body)) db.dictionary().markClean(w.id, w.updatedAt)
+            if (c.push("dictionary", SyncRules.ownedId(w.id, owner), body)) db.dictionary().markClean(w.id, w.updatedAt)
         }
         for (s in db.settings().dirty()) {
             val body = JSONObject().put("owner", owner).put("key", s.key).put("value_json", SyncRules.parseJson(s.valueJson))
                 .put("updated_at", s.updatedAt).put("deleted", s.deleted)
-            if (c.push("settings", s.id, body)) db.settings().markClean(s.id, s.updatedAt)
+            if (c.push("settings", SyncRules.ownedId(s.id, owner), body)) db.settings().markClean(s.id, s.updatedAt)
         }
     }
 
@@ -211,7 +218,13 @@ object SyncManager {
     }
 
     private suspend fun apply(db: FlowDb, col: String, r: JSONObject) {
-        val id = r.getString("id")
+        // Dictionary and settings rows are keyed locally by word or key. Server ids also carry the
+        // owner (SyncRules.ownedId), and records from older apps do not, so map both back.
+        val id = when (col) {
+            "dictionary" -> SyncRules.dictionaryId(r.getString("word"))
+            "settings" -> SyncRules.settingId(r.getString("key"))
+            else -> r.getString("id")
+        }
         val remoteAt = r.getLong("updated_at")
         when (col) {
             "transcripts" -> if (SyncRules.remoteWins(db.transcripts().get(id)?.updatedAt, remoteAt)) db.transcripts().upsert(

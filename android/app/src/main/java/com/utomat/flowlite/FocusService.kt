@@ -34,6 +34,18 @@ class FocusService : AccessibilityService() {
         if (Build.VERSION.SDK_INT >= 31) performGlobalAction(GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE)
     }
 
+    /**
+     * True when the focused field is a password field, including one showing its password as text.
+     * Accessibility cannot see the "no learning" flag that private browser tabs send to keyboards,
+     * so the voice keyboard is the only way to keep incognito dictation out of history.
+     */
+    fun focusedIsPrivate(): Boolean {
+        val root = rootInActiveWindow ?: return false
+        val f = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: return false
+        val node = if (f.isEditable) f else findFocusedEditable(root) ?: return false
+        return node.isPassword || PrivateFields.isPasswordType(node.inputType)
+    }
+
     /** The highlighted text in the focused field, if any. */
     fun selectedText(): String? {
         val node = focusedEditable() ?: return null
